@@ -3,3 +3,7 @@ pcap_test
 pcap_test_arm2
 test
 !*.c
+.claude/settings.local.json
+heartbeat/heartbeat
+heartbeat/mac_test
+__pycache__/
