@@ -1,14 +1,30 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <dirent.h>
 #include <stdbool.h>
+#include <signal.h>
+#include <time.h>
+#include <errno.h>
 #include <curl/curl.h>
 
 #define MAC_TEXT_LEN 12
 #define DEFAULT_HEARTBEAT_URL "http://10.0.0.1:3000/v1/devices/heartbeat"
+#define DEFAULT_HEARTBEAT_IFACE "wg1"
 #define RESPONSE_BODY_MAX 1024
+#define HEARTBEAT_PERIOD_SEC 5
+#define MAC_RETRY_SEC 1
+
+static volatile sig_atomic_t g_stop;
+
+static void handle_stop_signal(int signum)
+{
+    (void)signum;
+    g_stop = 1;
+}
 
 static int normalize_mac(const char *raw, char out[MAC_TEXT_LEN + 1])
 {
@@ -55,6 +71,28 @@ static int read_mac(const char *ifname, char out[MAC_TEXT_LEN + 1])
 
     fclose(fp);
     return normalize_mac(raw, out);
+}
+
+/*
+ * read_mac이 실패해도 프로그램을 종료하지 않고 1초 뒤 재시도한다.
+ * SIGTERM/SIGINT가 오면 mac을 못 구해도 즉시 포기하고 false를 반환한다.
+ */
+static bool read_mac_retrying(const char *ifname, char out[MAC_TEXT_LEN + 1])
+{
+    while (!g_stop) {
+        if (read_mac(ifname, out) == 0)
+            return true;
+
+        fprintf(stderr, "heartbeat: failed to read %s MAC, retry in %ds\n", ifname, MAC_RETRY_SEC);
+
+        struct timespec ts = { .tv_sec = MAC_RETRY_SEC, .tv_nsec = 0 };
+        while (clock_nanosleep(CLOCK_MONOTONIC, 0, &ts, &ts) == EINTR) {
+            if (g_stop)
+                break;
+        }
+    }
+
+    return false;
 }
 
 static bool is_process_running(const char *name)
@@ -175,16 +213,66 @@ static const char *get_heartbeat_url(void)
 }
 
 /*
+ * HEARTBEAT_IFACE가 설정 안 됐으면 기본값 wg1로 고정한다.
+ * 빈 문자열이면 NULL을 돌려줘 인터페이스 고정을 해제한다(로컬 테스트용).
+ */
+static const char *get_heartbeat_iface(void)
+{
+    const char *env_iface = getenv("HEARTBEAT_IFACE");
+
+    if (env_iface == NULL)
+        return DEFAULT_HEARTBEAT_IFACE;
+
+    if (env_iface[0] == '\0')
+        return NULL;
+
+    return env_iface;
+}
+
+/*
+ * 아주 단순한 탐색 기반 파서: 응답 바디에서 "config_version" 키의 정수값만
+ * 찾아낸다. 엄격한 JSON 검증은 하지 않으며, 못 찾거나 숫자가 아니면 실패.
+ */
+static bool parse_config_version(const char *json, long *out)
+{
+    const char *key = "\"config_version\"";
+    const char *p = strstr(json, key);
+    char *end;
+    long val;
+
+    if (p == NULL)
+        return false;
+
+    p += strlen(key);
+    while (*p == ' ' || *p == '\t')
+        p++;
+    if (*p != ':')
+        return false;
+    p++;
+    while (*p == ' ' || *p == '\t')
+        p++;
+
+    val = strtol(p, &end, 10);
+    if (end == p)
+        return false;
+
+    *out = val;
+    return true;
+}
+
+/*
  * POST를 1회만 수행한다. 전송 오류는 반환값(CURLcode)으로, HTTP 상태 코드는
  * *http_status로 분리해서 돌려준다. transport가 CURLE_OK가 아니면
- * *http_status는 의미가 없다(0으로 둠).
+ * *http_status는 의미가 없다(0으로 둠). iface가 NULL이 아니면
+ * CURLOPT_INTERFACE를 "if!<iface>" 형식으로 적용해 그 인터페이스로만 나가게 한다.
  */
-static CURLcode send_heartbeat(const char *url, const char *payload,
+static CURLcode send_heartbeat(const char *url, const char *iface, const char *payload,
                                 long *http_status, struct response_buffer *resp)
 {
     CURL *curl;
     CURLcode res;
     struct curl_slist *headers = NULL;
+    char iface_opt[64];
 
     resp->len = 0;
     resp->data[0] = '\0';
@@ -210,6 +298,11 @@ static CURLcode send_heartbeat(const char *url, const char *payload,
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, resp);
 
+    if (iface != NULL) {
+        snprintf(iface_opt, sizeof(iface_opt), "if!%s", iface);
+        curl_easy_setopt(curl, CURLOPT_INTERFACE, iface_opt);
+    }
+
     res = curl_easy_perform(curl);
     if (res == CURLE_OK)
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, http_status);
@@ -220,43 +313,109 @@ static CURLcode send_heartbeat(const char *url, const char *payload,
     return res;
 }
 
-int main(void)
+/*
+ * 한 주기치 작업: mac/rtsp_ok/wg_ok 수집 -> payload 생성 -> 전송 1회 -> 응답 처리.
+ * 어떤 단계가 실패해도(payload 생성 실패, 전송 실패, HTTP 오류, JSON 파싱 실패)
+ * 여기서 로그만 남기고 반환한다 - 호출자가 그대로 다음 주기로 넘어간다.
+ */
+static void run_heartbeat_cycle(const char *url, const char *iface)
 {
     char mac[MAC_TEXT_LEN + 1];
     char payload[256];
     struct response_buffer resp;
     bool rtsp_ok;
     bool wg_ok;
-    const char *url;
     CURLcode transport;
     long http_status;
 
-    if (read_mac("wlan0", mac) != 0) {
-        fprintf(stderr, "failed to read wlan0 MAC\n");
-        return 1;
-    }
+    if (!read_mac_retrying("wlan0", mac))
+        return; /* g_stop이 설정된 경우 */
 
     rtsp_ok = is_process_running("rkipc");
     wg_ok = is_interface_up("wg1");
 
-    printf("mac=%s\n", mac);
-    printf("rtsp_ok=%s\n", rtsp_ok ? "true" : "false");
-    printf("wg_ok=%s\n", wg_ok ? "true" : "false");
-
     if (!build_payload(payload, sizeof(payload), mac, rtsp_ok, wg_ok, 0)) {
-        fprintf(stderr, "failed to build payload\n");
-        return 1;
+        fprintf(stderr, "heartbeat: failed to build payload, skip this cycle\n");
+        return;
     }
 
-    url = get_heartbeat_url();
+    transport = send_heartbeat(url, iface, payload, &http_status, &resp);
+
+    if (transport != CURLE_OK) {
+        fprintf(stderr, "heartbeat: transport error: %s, retry next cycle\n",
+                curl_easy_strerror(transport));
+        return;
+    }
+
+    if (http_status == 200) {
+        long config_version;
+
+        if (parse_config_version(resp.data, &config_version))
+            printf("heartbeat: 200 OK, config_version=%ld\n", config_version);
+        else
+            fprintf(stderr, "heartbeat: 200 OK but failed to parse config_version, body=%s\n", resp.data);
+    } else if (http_status == 403) {
+        fprintf(stderr, "heartbeat: 403 Forbidden, retry next cycle\n");
+    } else {
+        fprintf(stderr, "heartbeat: unexpected HTTP status=%ld, retry next cycle\n", http_status);
+    }
+}
+
+static bool timespec_is_past_or_equal(const struct timespec *a, const struct timespec *b)
+{
+    if (a->tv_sec != b->tv_sec)
+        return a->tv_sec < b->tv_sec;
+    return a->tv_nsec <= b->tv_nsec;
+}
+
+int main(void)
+{
+    struct sigaction sa;
+    struct timespec next;
+    const char *url;
+    const char *iface;
+
+    setvbuf(stdout, NULL, _IOLBF, 0);
+
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = handle_stop_signal;
+    sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGINT, &sa, NULL);
 
     curl_global_init(CURL_GLOBAL_DEFAULT);
-    transport = send_heartbeat(url, payload, &http_status, &resp);
-    curl_global_cleanup();
 
-    printf("transport=%s\n", curl_easy_strerror(transport));
-    printf("http=%ld\n", http_status);
-    printf("body=%s\n", resp.data);
+    url = get_heartbeat_url();
+    iface = get_heartbeat_iface();
+
+    printf("heartbeat: url=%s iface=%s period=%ds\n", url, iface != NULL ? iface : "(해제됨)", HEARTBEAT_PERIOD_SEC);
+
+    clock_gettime(CLOCK_MONOTONIC, &next);
+
+    while (!g_stop) {
+        run_heartbeat_cycle(url, iface);
+
+        if (g_stop)
+            break;
+
+        next.tv_sec += HEARTBEAT_PERIOD_SEC;
+
+        /*
+         * 전송(및 재시도)이 길어져 다음 주기 시작 시각을 이미 지났으면,
+         * 밀린 만큼 몰아서 돌리지 않고 지금 이후의 가장 가까운 주기로 재정렬한다.
+         */
+        struct timespec now;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        while (timespec_is_past_or_equal(&next, &now))
+            next.tv_sec += HEARTBEAT_PERIOD_SEC;
+
+        int rc;
+        do {
+            rc = clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, NULL);
+        } while (rc == EINTR && !g_stop);
+    }
+
+    curl_global_cleanup();
+    fprintf(stderr, "heartbeat: signal received, terminated\n");
 
     return 0;
 }
