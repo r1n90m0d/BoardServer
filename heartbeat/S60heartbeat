@@ -1,0 +1,58 @@
+#!/bin/sh
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+DAEMON=/usr/bin/heartbeat
+NAME=heartbeat
+
+start() {
+	if pidof "$NAME" >/dev/null 2>&1; then
+		echo "$NAME already running (pid $(pidof "$NAME"))"
+		return 0
+	fi
+
+	printf 'Starting %s: ' "$NAME"
+	# 별도 로그 파일을 새로 안 만들고 기존 syslogd(/var/log/messages)로 보낸다.
+	# setsid로 현재 세션/터미널과 완전히 분리해 "&"만으로는 못 막는, 호출한 쪽
+	# 세션이 끊길 때 같이 죽는 문제를 막는다. rcS의 부팅 순서는 "&"로 막지 않는다.
+	setsid sh -c "'$DAEMON' 2>&1 | logger -t '$NAME'" < /dev/null > /dev/null 2>&1 &
+	echo "OK"
+}
+
+stop() {
+	pids=$(pidof "$NAME")
+	if [ -z "$pids" ]; then
+		echo "$NAME not running"
+		return 0
+	fi
+
+	printf 'Stopping %s: ' "$NAME"
+	kill -TERM $pids 2>/dev/null
+
+	# heartbeat는 SIGTERM을 받으면 자원 정리 후 즉시 종료하므로 길게 기다릴 필요는 없지만,
+	# 혹시 늦어지는 경우를 대비해 최대 5초까지 확인 후 안 죽으면 강제 종료한다.
+	i=0
+	while [ "$i" -lt 5 ] && pidof "$NAME" >/dev/null 2>&1; do
+		sleep 1
+		i=$((i + 1))
+	done
+
+	if pidof "$NAME" >/dev/null 2>&1; then
+		kill -KILL $(pidof "$NAME") 2>/dev/null
+	fi
+	echo "OK"
+}
+
+restart() {
+	stop
+	start
+}
+
+case "$1" in
+	start|stop|restart)
+		"$1"
+		;;
+	*)
+		echo "Usage: $0 {start|stop|restart}"
+		exit 1
+		;;
+esac

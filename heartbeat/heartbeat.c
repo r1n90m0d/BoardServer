@@ -26,6 +26,22 @@ static void handle_stop_signal(int signum)
     g_stop = 1;
 }
 
+enum heartbeat_result {
+    RESULT_UNKNOWN,
+    RESULT_OK_200,
+    RESULT_FORBIDDEN_403,
+    RESULT_OTHER_HTTP,
+    RESULT_TRANSPORT_ERROR
+};
+
+/* 이전 주기와 비교해 바뀐 것만 로그로 남기기 위한 상태 (단일 루프이므로 전역으로 둔다) */
+static bool g_status_logged;
+static bool g_last_rtsp_ok;
+static bool g_last_wg_ok;
+static enum heartbeat_result g_last_result = RESULT_UNKNOWN;
+static bool g_config_version_known;
+static long g_last_config_version;
+
 static int normalize_mac(const char *raw, char out[MAC_TEXT_LEN + 1])
 {
     int count = 0;
@@ -317,6 +333,7 @@ static CURLcode send_heartbeat(const char *url, const char *iface, const char *p
  * 한 주기치 작업: mac/rtsp_ok/wg_ok 수집 -> payload 생성 -> 전송 1회 -> 응답 처리.
  * 어떤 단계가 실패해도(payload 생성 실패, 전송 실패, HTTP 오류, JSON 파싱 실패)
  * 여기서 로그만 남기고 반환한다 - 호출자가 그대로 다음 주기로 넘어간다.
+ * 로그는 값/결과가 바뀔 때만 남긴다(같은 상태가 계속되면 5초마다 반복 안 함).
  */
 static void run_heartbeat_cycle(const char *url, const char *iface)
 {
@@ -334,6 +351,14 @@ static void run_heartbeat_cycle(const char *url, const char *iface)
     rtsp_ok = is_process_running("rkipc");
     wg_ok = is_interface_up("wg1");
 
+    if (!g_status_logged || rtsp_ok != g_last_rtsp_ok || wg_ok != g_last_wg_ok) {
+        printf("heartbeat: status rtsp_ok=%s wg_ok=%s\n",
+               rtsp_ok ? "true" : "false", wg_ok ? "true" : "false");
+        g_last_rtsp_ok = rtsp_ok;
+        g_last_wg_ok = wg_ok;
+        g_status_logged = true;
+    }
+
     if (!build_payload(payload, sizeof(payload), mac, rtsp_ok, wg_ok, 0)) {
         fprintf(stderr, "heartbeat: failed to build payload, skip this cycle\n");
         return;
@@ -342,22 +367,41 @@ static void run_heartbeat_cycle(const char *url, const char *iface)
     transport = send_heartbeat(url, iface, payload, &http_status, &resp);
 
     if (transport != CURLE_OK) {
-        fprintf(stderr, "heartbeat: transport error: %s, retry next cycle\n",
-                curl_easy_strerror(transport));
+        if (g_last_result != RESULT_TRANSPORT_ERROR) {
+            fprintf(stderr, "heartbeat: transport error: %s, retry next cycle\n",
+                    curl_easy_strerror(transport));
+            g_last_result = RESULT_TRANSPORT_ERROR;
+        }
         return;
     }
 
     if (http_status == 200) {
         long config_version;
 
-        if (parse_config_version(resp.data, &config_version))
-            printf("heartbeat: 200 OK, config_version=%ld\n", config_version);
-        else
+        if (g_last_result != RESULT_OK_200) {
+            printf("heartbeat: 200 OK\n");
+            g_last_result = RESULT_OK_200;
+        }
+
+        if (parse_config_version(resp.data, &config_version)) {
+            if (!g_config_version_known || config_version != g_last_config_version) {
+                printf("heartbeat: config_version=%ld\n", config_version);
+                g_last_config_version = config_version;
+                g_config_version_known = true;
+            }
+        } else {
             fprintf(stderr, "heartbeat: 200 OK but failed to parse config_version, body=%s\n", resp.data);
+        }
     } else if (http_status == 403) {
-        fprintf(stderr, "heartbeat: 403 Forbidden, retry next cycle\n");
+        if (g_last_result != RESULT_FORBIDDEN_403) {
+            fprintf(stderr, "heartbeat: 403 Forbidden, retry next cycle\n");
+            g_last_result = RESULT_FORBIDDEN_403;
+        }
     } else {
-        fprintf(stderr, "heartbeat: unexpected HTTP status=%ld, retry next cycle\n", http_status);
+        if (g_last_result != RESULT_OTHER_HTTP) {
+            fprintf(stderr, "heartbeat: unexpected HTTP status=%ld, retry next cycle\n", http_status);
+            g_last_result = RESULT_OTHER_HTTP;
+        }
     }
 }
 
@@ -374,8 +418,12 @@ int main(void)
     struct timespec next;
     const char *url;
     const char *iface;
+    char mac[MAC_TEXT_LEN + 1];
 
     setvbuf(stdout, NULL, _IOLBF, 0);
+
+    /* logger 등 파이프 반대편이 먼저 끊겨도 SIGPIPE로 죽지 않게 한다 */
+    signal(SIGPIPE, SIG_IGN);
 
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = handle_stop_signal;
@@ -387,7 +435,14 @@ int main(void)
     url = get_heartbeat_url();
     iface = get_heartbeat_iface();
 
-    printf("heartbeat: url=%s iface=%s period=%ds\n", url, iface != NULL ? iface : "(해제됨)", HEARTBEAT_PERIOD_SEC);
+    if (!read_mac_retrying("wlan0", mac)) {
+        curl_global_cleanup();
+        fprintf(stderr, "heartbeat: signal received, terminated\n");
+        return 0;
+    }
+
+    printf("heartbeat: url=%s iface=%s mac=%s period=%ds\n",
+           url, iface != NULL ? iface : "(해제됨)", mac, HEARTBEAT_PERIOD_SEC);
 
     clock_gettime(CLOCK_MONOTONIC, &next);
 
