@@ -12,7 +12,7 @@
 #include <curl/curl.h>
 
 #define MAC_TEXT_LEN 12
-#define DEFAULT_HEARTBEAT_URL "http://10.0.0.1:3000/v1/devices/heartbeat"
+#define DEFAULT_HEARTBEAT_URL "http://10.0.0.100:3000/v1/devices/heartbeat"
 #define DEFAULT_HEARTBEAT_IFACE "wg1"
 #define RESPONSE_BODY_MAX 1024
 #define HEARTBEAT_PERIOD_SEC 5
