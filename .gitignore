@@ -9,3 +9,4 @@ heartbeat/mac_test
 __pycache__/
 CLAUDE.local.md
 docs/I2/
+docs/sensitive-changes.md

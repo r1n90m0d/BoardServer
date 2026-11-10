@@ -1,0 +1,20 @@
+rkipc: main VI channel (VIDEO_PIPE_0) buffer count 2 -> 3
+
+Base:  ~/luckfox-pico/project/app/rkipc/rkipc (SDK commit 824b817f8)
+Apply: cd <rkipc source root> && patch -p1 < rkipc-main-vi-bufcnt.patch
+Build: cmake with -DCOMPILE_FOR_RV1106_IPC=ON (see docs/progress/I2.md, "rkipc 빌드")
+Status: NOT TESTED on the board yet (test 2-B was skipped, 2026-11-10).
+Purpose: check whether ISP main path frame loss (live/0 ~10 fps) is caused by
+having only two VI buffers (/dev/mpi/valloc pool: total 2, free 0).
+
+--- a/src/rv1106_ipc/video/video.c	2026-07-19 14:06:39.262185266 +0900
++++ b/src/rv1106_ipc/video/video.c	2026-11-10 19:35:17.968468843 +0900
+@@ -717,7 +717,7 @@
+ 	int video_height = rk_param_get_int("video.0:height", -1);
+ 	int buffer_line = rk_param_get_int("video.source:buffer_line", video_height / 4);
+ 	int rotation = rk_param_get_int("video.source:rotation", 0);
+-	int buf_cnt = 2;
++	int buf_cnt = 3;
+ 	int frame_min_i_qp = rk_param_get_int("video.0:frame_min_i_qp", 26);
+ 	int frame_min_qp = rk_param_get_int("video.0:frame_min_qp", 28);
+ 	int frame_max_i_qp = rk_param_get_int("video.0:frame_max_i_qp", 51);
