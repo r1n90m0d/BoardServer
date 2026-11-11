@@ -23,6 +23,7 @@
 - I2 기준 문서: `docs/I2/`의 `I2_Description.md`, `ICD_I2range.md`, `I2_ToDoList.md` (`docs/srs/`는 만들지 않음)
   - `docs/I2/`는 git 추적 대상이 아님(공개 저장소라 서버 IP·MAC 포함 문서를 올리지 않음). 원본은 노션
 - I2 진행 기록: `docs/progress/I2.md` — 체크리스트와 세션 로그
+- RKMPI 문서 검색은 `docs/vendor/`의 마크다운에서 grep, 원본은 SDK 경로(`~/luckfox-pico/media/...`, 목록은 `docs/vendor/README.md`). `docs/vendor/`는 git 추적 대상 아님
 
 ## 보드 접근 방법
 
