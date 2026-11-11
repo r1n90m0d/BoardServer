@@ -8,12 +8,14 @@
 
 #include <rtsp_demo.h>
 
+#include "audio.h"
 #include "log.h"
 
 #define EVENT_INTERVAL_US 10000
 
 static rtsp_demo_handle g_demo;
 static rtsp_session_handle g_session[RTSP_MAX_SESSIONS];
+static int g_has_audio[RTSP_MAX_SESSIONS];
 static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_t g_thread;
 static atomic_int g_run;
@@ -64,6 +66,14 @@ int rtsp_srv_add_session(int idx, const char *path, int with_audio)
 		/* 코덱 정보(VPS/SPS/PPS)는 첫 키프레임에서 라이브러리가 뽑는다. */
 		rtsp_set_video(s, RTSP_CODEC_ID_VIDEO_H265, NULL, 0);
 		rtsp_sync_video_ts(s, rtsp_get_reltime(), rtsp_get_ntptime());
+		/* 오디오 트랙은 요청했을 때만 선언한다. 선언하지 않으면 SDP 에 m=audio 가 없다. */
+		if (with_audio) {
+			rtsp_set_audio(s, RTSP_CODEC_ID_AUDIO_G711A, NULL, 0);
+			rtsp_set_audio_sample_rate(s, AUDIO_SAMPLE_RATE);
+			rtsp_set_audio_channels(s, AUDIO_CHANNELS);
+			rtsp_sync_audio_ts(s, rtsp_get_reltime(), rtsp_get_ntptime());
+		}
+		g_has_audio[idx] = with_audio ? 1 : 0;
 		g_session[idx] = s;
 	}
 	pthread_mutex_unlock(&g_lock);
@@ -72,9 +82,7 @@ int rtsp_srv_add_session(int idx, const char *path, int with_audio)
 		LOGE("rtsp: 세션 %s 생성 실패", path);
 		return -1;
 	}
-	/* 오디오 트랙 선언은 5단계에서 추가한다. 꺼져 있으면 아무것도 선언하지 않는다. */
-	(void)with_audio;
-	LOGI("rtsp: 세션 %s (영상 H.265, 오디오 없음)", path);
+	LOGI("rtsp: 세션 %s (영상 H.265, 오디오 %s)", path, with_audio ? "G.711A" : "없음");
 	return 0;
 }
 
@@ -85,6 +93,21 @@ void rtsp_srv_send_video(int idx, const uint8_t *data, int len, uint64_t pts_us)
 	pthread_mutex_lock(&g_lock);
 	if (g_demo != NULL && g_session[idx] != NULL) {
 		rtsp_tx_video(g_session[idx], data, len, pts_us);
+		rtsp_do_event(g_demo);
+	}
+	pthread_mutex_unlock(&g_lock);
+}
+
+void rtsp_srv_send_audio(const uint8_t *data, int len, uint64_t pts_us)
+{
+	int i;
+
+	pthread_mutex_lock(&g_lock);
+	if (g_demo != NULL) {
+		for (i = 0; i < RTSP_MAX_SESSIONS; i++) {
+			if (g_session[i] != NULL && g_has_audio[i])
+				rtsp_tx_audio(g_session[i], data, len, pts_us);
+		}
 		rtsp_do_event(g_demo);
 	}
 	pthread_mutex_unlock(&g_lock);

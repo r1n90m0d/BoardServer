@@ -32,6 +32,7 @@ struct config {
 	int reinit_max;        /* 정지 때 재초기화를 시도하는 횟수 상한 */
 	int reinit_timeout_s;  /* 재초기화가 이 시간 안에 끝나지 않으면 failed */
 	char status_file[128]; /* 상태 파일 (비우면 쓰지 않음) */
+	int audio_enable;      /* 오디오(G.711A). 마이크 확인 전에는 켜지 말 것 */
 };
 
 void config_defaults(struct config *cfg);

@@ -35,3 +35,6 @@ stall_action     = reinit  # log: 기록만 / reinit: 파이프라인 해제 후
 reinit_max       = 3       # 정지 때 재초기화 시도 횟수 상한 (넘으면 state=failed)
 reinit_timeout_s = 30      # 재초기화가 이 시간 안에 끝나지 않으면 state=failed
 status_file      = /tmp/streamer.status
+
+audio_enable     = 0       # 오디오 G.711A 8kHz mono. 보드에서 검증하지 않았음.
+                           # 마이크가 연결돼 있는지 확인하기 전에는 켜지 말 것 (design.md 5절)

@@ -14,6 +14,8 @@
 int rtsp_srv_start(int port);
 int rtsp_srv_add_session(int idx, const char *path, int with_audio);
 void rtsp_srv_send_video(int idx, const uint8_t *data, int len, uint64_t pts_us);
+/* 오디오 트랙을 선언한 모든 세션으로 보낸다. */
+void rtsp_srv_send_audio(const uint8_t *data, int len, uint64_t pts_us);
 void rtsp_srv_stop(void);
 
 #endif

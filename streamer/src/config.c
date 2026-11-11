@@ -53,6 +53,7 @@ static const struct key_desc g_keys[] = {
 	K_INT(reinit_max, 0, 100, "정지 때 재초기화 시도 횟수 상한"),
 	K_INT(reinit_timeout_s, 5, 600, "재초기화 제한 시간(초)"),
 	K_STR(status_file, "상태 파일 (비우면 쓰지 않음)"),
+	K_INT(audio_enable, 0, 1, "오디오 G.711A (보드 미검증, 마이크 확인 전에는 0)"),
 };
 
 #define KEY_COUNT (sizeof(g_keys) / sizeof(g_keys[0]))

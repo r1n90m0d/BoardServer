@@ -8,6 +8,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "audio.h"
 #include "config.h"
 #include "isp.h"
 #include "log.h"
@@ -16,9 +17,10 @@
 #include "video.h"
 #include "watch.h"
 
-#define STREAMER_VERSION "0.4-stage4"
+#define STREAMER_VERSION "0.5-stage5"
 
 static volatile sig_atomic_t g_quit;
+static int g_audio_track; /* RTSP 세션에 오디오 트랙을 선언했는지 */
 
 static void on_signal(int sig)
 {
@@ -51,11 +53,15 @@ static int pipeline_start(const struct config *cfg)
 	}
 	if (osd_start(cfg) != 0)
 		LOGW("OSD 를 시작하지 못함 (영상은 계속 송출)");
+	/* 재초기화 때: 이미 트랙을 선언했으면 오디오도 다시 띄운다. */
+	if (g_audio_track && audio_start(cfg) != 0)
+		LOGW("오디오를 다시 시작하지 못함 (트랙은 선언된 채 데이터 없음)");
 	return 0;
 }
 
 static void pipeline_stop(void)
 {
+	audio_stop();
 	osd_stop();
 	video_stop();
 	isp_stop();
@@ -127,14 +133,27 @@ int main(int argc, char **argv)
 
 	if (rtsp_srv_start(cfg.rtsp_port) != 0)
 		return 1;
-	if (rtsp_srv_add_session(0, "/live/0", 0) != 0 ||
-	    (cfg.sub_enable && rtsp_srv_add_session(1, "/live/1", 0) != 0)) {
-		rtsp_srv_stop();
-		return 1;
-	}
 
 	if (pipeline_start(&cfg) != 0) {
 		LOGE("파이프라인 시작 실패");
+		rtsp_srv_stop();
+		log_close();
+		return 1;
+	}
+
+	/*
+	 * 오디오는 실제로 열렸을 때만 트랙을 선언한다. 켜지 않았거나 실패하면 SDP 에 오디오가 없다
+	 * (데이터 없는 오디오 트랙은 재생기를 멈추게 하므로 만들지 않는다).
+	 */
+	if (cfg.audio_enable) {
+		if (audio_start(&cfg) == 0)
+			g_audio_track = 1;
+		else
+			LOGW("오디오를 시작하지 못함 -> 영상만 송출");
+	}
+	if (rtsp_srv_add_session(0, "/live/0", g_audio_track) != 0 ||
+	    (cfg.sub_enable && rtsp_srv_add_session(1, "/live/1", g_audio_track) != 0)) {
+		pipeline_stop();
 		rtsp_srv_stop();
 		log_close();
 		return 1;
