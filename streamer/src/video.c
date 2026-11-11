@@ -290,6 +290,9 @@ int video_start(const struct config *cfg)
 	memset(g_chn, 0, sizeof(g_chn));
 	chn_setup(&g_chn[0], 0, cfg->main_width, cfg->main_height, cfg->main_kbps, cfg->main_gop,
 	          cfg->fps, cfg->vi_buf_cnt, cfg->vi_depth);
+	if (cfg->sub_enable)
+		chn_setup(&g_chn[1], 1, cfg->sub_width, cfg->sub_height, cfg->sub_kbps, cfg->sub_gop,
+		          cfg->fps, cfg->sub_vi_buf_cnt, cfg->sub_vi_depth);
 
 	ret = RK_MPI_SYS_Init();
 	if (ret != RK_SUCCESS) {

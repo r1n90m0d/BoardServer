@@ -18,6 +18,13 @@ struct config {
 	int main_height;
 	int main_kbps;
 	int main_gop;
+	int sub_enable;     /* 서브 채널(/live/1) 사용 */
+	int sub_vi_buf_cnt;
+	int sub_vi_depth;
+	int sub_width;
+	int sub_height;
+	int sub_kbps;
+	int sub_gop;
 };
 
 void config_defaults(struct config *cfg);

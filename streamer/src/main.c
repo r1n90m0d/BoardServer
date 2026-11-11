@@ -14,7 +14,7 @@
 #include "rtsp.h"
 #include "video.h"
 
-#define STREAMER_VERSION "0.1-stage1"
+#define STREAMER_VERSION "0.2-stage2"
 
 static volatile sig_atomic_t g_quit;
 
@@ -115,7 +115,8 @@ int main(int argc, char **argv)
 
 	if (rtsp_srv_start(cfg.rtsp_port) != 0)
 		return 1;
-	if (rtsp_srv_add_session(0, "/live/0", 0) != 0) {
+	if (rtsp_srv_add_session(0, "/live/0", 0) != 0 ||
+	    (cfg.sub_enable && rtsp_srv_add_session(1, "/live/1", 0) != 0)) {
 		rtsp_srv_stop();
 		return 1;
 	}
@@ -131,8 +132,8 @@ int main(int argc, char **argv)
 	while (!g_quit)
 		usleep(200 * 1000);
 
-	LOGI("종료 요청, 해제 시작 (메인 %llu 프레임 송출)",
-	     (unsigned long long)video_frames_out(0));
+	LOGI("종료 요청, 해제 시작 (메인 %llu, 서브 %llu 프레임 송출)",
+	     (unsigned long long)video_frames_out(0), (unsigned long long)video_frames_out(1));
 	pipeline_stop();
 	rtsp_srv_stop();
 	LOGI("종료");

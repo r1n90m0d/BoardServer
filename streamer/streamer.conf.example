@@ -18,3 +18,11 @@ main_width  = 1920
 main_height = 1080
 main_kbps   = 4096   # CBR
 main_gop    = 18     # 프레임 수 (18fps 에서 1초)
+
+sub_enable     = 1    # 서브 스트림 /live/1
+sub_vi_buf_cnt = 2
+sub_vi_depth   = 0
+sub_width      = 960
+sub_height     = 540
+sub_kbps       = 1024
+sub_gop        = 18

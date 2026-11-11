@@ -39,6 +39,13 @@ static const struct key_desc g_keys[] = {
 	K_INT(main_height, 240, 2160, "메인 스트림 높이"),
 	K_INT(main_kbps, 64, 20000, "메인 스트림 비트레이트(kbps, CBR)"),
 	K_INT(main_gop, 1, 300, "메인 스트림 GOP(프레임 수)"),
+	K_INT(sub_enable, 0, 1, "서브 스트림(/live/1) 사용"),
+	K_INT(sub_vi_buf_cnt, 2, 6, "서브 VI 버퍼 수"),
+	K_INT(sub_vi_depth, 0, 6, "서브 VI Depth"),
+	K_INT(sub_width, 160, 1920, "서브 스트림 폭"),
+	K_INT(sub_height, 120, 1080, "서브 스트림 높이"),
+	K_INT(sub_kbps, 64, 20000, "서브 스트림 비트레이트(kbps, CBR)"),
+	K_INT(sub_gop, 1, 300, "서브 스트림 GOP(프레임 수)"),
 };
 
 #define KEY_COUNT (sizeof(g_keys) / sizeof(g_keys[0]))
@@ -57,6 +64,13 @@ void config_defaults(struct config *cfg)
 	cfg->main_height = 1080;
 	cfg->main_kbps = 4096;
 	cfg->main_gop = 18;
+	cfg->sub_enable = 1;
+	cfg->sub_vi_buf_cnt = 2;
+	cfg->sub_vi_depth = 0;
+	cfg->sub_width = 960;
+	cfg->sub_height = 540;
+	cfg->sub_kbps = 1024;
+	cfg->sub_gop = 18;
 }
 
 static char *trim(char *s)
@@ -167,6 +181,21 @@ int config_validate(const struct config *cfg, char *err, int err_len)
 	if ((cfg->main_width % 2) != 0 || (cfg->main_height % 2) != 0) {
 		snprintf(err, (size_t)err_len, "main_width/main_height 는 짝수여야 함");
 		return -1;
+	}
+	if (cfg->sub_enable) {
+		if (cfg->sub_vi_depth > cfg->sub_vi_buf_cnt) {
+			snprintf(err, (size_t)err_len, "sub_vi_depth(%d)가 sub_vi_buf_cnt(%d)보다 큼",
+			         cfg->sub_vi_depth, cfg->sub_vi_buf_cnt);
+			return -1;
+		}
+		if ((cfg->sub_width % 2) != 0 || (cfg->sub_height % 2) != 0) {
+			snprintf(err, (size_t)err_len, "sub_width/sub_height 는 짝수여야 함");
+			return -1;
+		}
+		if (cfg->sub_width > cfg->main_width || cfg->sub_height > cfg->main_height) {
+			snprintf(err, (size_t)err_len, "서브 해상도가 메인보다 큼");
+			return -1;
+		}
 	}
 	return 0;
 }
