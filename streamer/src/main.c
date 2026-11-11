@@ -11,10 +11,11 @@
 #include "config.h"
 #include "isp.h"
 #include "log.h"
+#include "osd.h"
 #include "rtsp.h"
 #include "video.h"
 
-#define STREAMER_VERSION "0.2-stage2"
+#define STREAMER_VERSION "0.3-stage3"
 
 static volatile sig_atomic_t g_quit;
 
@@ -42,11 +43,14 @@ static int pipeline_start(const struct config *cfg)
 		isp_stop();
 		return -1;
 	}
+	if (osd_start(cfg) != 0)
+		LOGW("OSD 를 시작하지 못함 (영상은 계속 송출)");
 	return 0;
 }
 
 static void pipeline_stop(void)
 {
+	osd_stop();
 	video_stop();
 	isp_stop();
 }

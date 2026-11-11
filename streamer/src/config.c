@@ -46,6 +46,7 @@ static const struct key_desc g_keys[] = {
 	K_INT(sub_height, 120, 1080, "서브 스트림 높이"),
 	K_INT(sub_kbps, 64, 20000, "서브 스트림 비트레이트(kbps, CBR)"),
 	K_INT(sub_gop, 1, 300, "서브 스트림 GOP(프레임 수)"),
+	K_INT(osd_enable, 0, 1, "날짜·시각 OSD"),
 };
 
 #define KEY_COUNT (sizeof(g_keys) / sizeof(g_keys[0]))
@@ -71,6 +72,7 @@ void config_defaults(struct config *cfg)
 	cfg->sub_height = 540;
 	cfg->sub_kbps = 1024;
 	cfg->sub_gop = 18;
+	cfg->osd_enable = 1;
 }
 
 static char *trim(char *s)

@@ -16,5 +16,7 @@ int video_start(const struct config *cfg);
 void video_stop(void);
 /* 채널이 지금까지 내보낸 인코딩 프레임 수(재초기화해도 이어서 센다). */
 uint64_t video_frames_out(int chn);
+/* 채널이 켜져 있으면 1 을 돌려주고 해상도를 채운다. */
+int video_chn_size(int chn, int *width, int *height);
 
 #endif

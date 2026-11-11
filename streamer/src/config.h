@@ -25,6 +25,7 @@ struct config {
 	int sub_height;
 	int sub_kbps;
 	int sub_gop;
+	int osd_enable;     /* 날짜·시각 OSD */
 };
 
 void config_defaults(struct config *cfg);

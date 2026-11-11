@@ -26,3 +26,5 @@ sub_width      = 960
 sub_height     = 540
 sub_kbps       = 1024
 sub_gop        = 18
+
+osd_enable     = 1    # 날짜·시각 OSD (왼쪽 위)

@@ -350,3 +350,12 @@ uint64_t video_frames_out(int chn)
 		return 0;
 	return (uint64_t)atomic_load(&g_frames[chn]);
 }
+
+int video_chn_size(int chn, int *width, int *height)
+{
+	if (chn < 0 || chn >= VIDEO_MAX_CHN || !g_chn[chn].active)
+		return 0;
+	*width = g_chn[chn].width;
+	*height = g_chn[chn].height;
+	return 1;
+}
