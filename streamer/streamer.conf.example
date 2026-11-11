@@ -1,0 +1,20 @@
+# streamer 설정 예시. "key = value", '#' 뒤는 주석.
+# 적용: streamer -c /경로/streamer.conf   (명령행 -o key=value 가 우선)
+# 아래 값은 모두 기본값이다.
+
+iq_dir      = /oem/usr/share/iqfiles   # rkaiq IQ json 디렉토리
+log_file    =                          # 비우면 stderr (-l 옵션과 같음)
+rtsp_port   = 554
+
+fps         = 18     # 실제 목표 fps (인코더 프레임레이트)
+ae_fps_x10  = 120    # rkaiq AE 고정 fps x10 (센서 표기 기준). 실제 fps = 값/10 x 1.5
+                     # 예: 120 -> 실제 18fps, 133 -> 실제 약 20fps, 0 -> 고정 안 함
+
+raw_buf_cnt = 3      # CIF raw 버퍼 수
+vi_buf_cnt  = 3      # 메인 VI 버퍼 수
+vi_depth    = 1      # 메인 VI Depth
+
+main_width  = 1920
+main_height = 1080
+main_kbps   = 4096   # CBR
+main_gop    = 18     # 프레임 수 (18fps 에서 1초)
