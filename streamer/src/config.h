@@ -26,6 +26,12 @@ struct config {
 	int sub_kbps;
 	int sub_gop;
 	int osd_enable;     /* 날짜·시각 OSD */
+	int stall_timeout_s;   /* 프레임 카운터가 이 시간 동안 늘지 않으면 정지 */
+	int stall_grace_s;     /* 시작·재초기화 직후 판정하지 않는 시간 */
+	char stall_action[16]; /* "log" 또는 "reinit" */
+	int reinit_max;        /* 정지 때 재초기화를 시도하는 횟수 상한 */
+	int reinit_timeout_s;  /* 재초기화가 이 시간 안에 끝나지 않으면 failed */
+	char status_file[128]; /* 상태 파일 (비우면 쓰지 않음) */
 };
 
 void config_defaults(struct config *cfg);

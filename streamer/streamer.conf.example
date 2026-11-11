@@ -28,3 +28,10 @@ sub_kbps       = 1024
 sub_gop        = 18
 
 osd_enable     = 1    # 날짜·시각 OSD (왼쪽 위)
+
+stall_timeout_s  = 5       # CIF 또는 VENC0 프레임 수가 이 시간 동안 늘지 않으면 정지로 판정
+stall_grace_s    = 15      # 시작·재초기화 직후 판정하지 않는 시간
+stall_action     = reinit  # log: 기록만 / reinit: 파이프라인 해제 후 다시 초기화
+reinit_max       = 3       # 정지 때 재초기화 시도 횟수 상한 (넘으면 state=failed)
+reinit_timeout_s = 30      # 재초기화가 이 시간 안에 끝나지 않으면 state=failed
+status_file      = /tmp/streamer.status

@@ -47,6 +47,12 @@ static const struct key_desc g_keys[] = {
 	K_INT(sub_kbps, 64, 20000, "서브 스트림 비트레이트(kbps, CBR)"),
 	K_INT(sub_gop, 1, 300, "서브 스트림 GOP(프레임 수)"),
 	K_INT(osd_enable, 0, 1, "날짜·시각 OSD"),
+	K_INT(stall_timeout_s, 2, 600, "정지 판정 시간(초)"),
+	K_INT(stall_grace_s, 0, 600, "시작·재초기화 뒤 판정 유예(초)"),
+	K_STR(stall_action, "정지 때 동작: log 또는 reinit"),
+	K_INT(reinit_max, 0, 100, "정지 때 재초기화 시도 횟수 상한"),
+	K_INT(reinit_timeout_s, 5, 600, "재초기화 제한 시간(초)"),
+	K_STR(status_file, "상태 파일 (비우면 쓰지 않음)"),
 };
 
 #define KEY_COUNT (sizeof(g_keys) / sizeof(g_keys[0]))
@@ -73,6 +79,12 @@ void config_defaults(struct config *cfg)
 	cfg->sub_kbps = 1024;
 	cfg->sub_gop = 18;
 	cfg->osd_enable = 1;
+	cfg->stall_timeout_s = 5;
+	cfg->stall_grace_s = 15;
+	snprintf(cfg->stall_action, sizeof(cfg->stall_action), "%s", "reinit");
+	cfg->reinit_max = 3;
+	cfg->reinit_timeout_s = 30;
+	snprintf(cfg->status_file, sizeof(cfg->status_file), "%s", "/tmp/streamer.status");
 }
 
 static char *trim(char *s)
@@ -182,6 +194,10 @@ int config_validate(const struct config *cfg, char *err, int err_len)
 	}
 	if ((cfg->main_width % 2) != 0 || (cfg->main_height % 2) != 0) {
 		snprintf(err, (size_t)err_len, "main_width/main_height 는 짝수여야 함");
+		return -1;
+	}
+	if (strcmp(cfg->stall_action, "log") != 0 && strcmp(cfg->stall_action, "reinit") != 0) {
+		snprintf(err, (size_t)err_len, "stall_action 은 log 또는 reinit 이어야 함");
 		return -1;
 	}
 	if (cfg->sub_enable) {

@@ -14,15 +14,20 @@
 #include "osd.h"
 #include "rtsp.h"
 #include "video.h"
+#include "watch.h"
 
-#define STREAMER_VERSION "0.3-stage3"
+#define STREAMER_VERSION "0.4-stage4"
 
 static volatile sig_atomic_t g_quit;
 
 static void on_signal(int sig)
 {
-	(void)sig;
-	g_quit = 1;
+	if (sig == SIGUSR1)
+		watch_request_reinit();
+	else if (sig == SIGUSR2)
+		watch_simulate_stall();
+	else
+		g_quit = 1;
 }
 
 static void usage(const char *prog)
@@ -31,6 +36,7 @@ static void usage(const char *prog)
 	printf("  -c 파일        key = value 형식 설정 파일\n");
 	printf("  -l 파일        로그 파일 (log_file 과 같음, 기본 stderr)\n");
 	printf("  -o key=value   설정 한 건 지정 (여러 번 가능, 설정 파일보다 우선)\n");
+	printf("신호: TERM/INT 종료, USR1 재초기화 1회, USR2 정지 모의(시험용)\n");
 	printf("설정 키:\n");
 	config_print_keys();
 }
@@ -115,6 +121,8 @@ int main(int argc, char **argv)
 	sa.sa_handler = on_signal;
 	sigaction(SIGINT, &sa, NULL);
 	sigaction(SIGTERM, &sa, NULL);
+	sigaction(SIGUSR1, &sa, NULL);
+	sigaction(SIGUSR2, &sa, NULL);
 	signal(SIGPIPE, SIG_IGN);
 
 	if (rtsp_srv_start(cfg.rtsp_port) != 0)
@@ -132,13 +140,33 @@ int main(int argc, char **argv)
 		return 1;
 	}
 	LOGI("송출 시작");
+	if (watch_start(&cfg, &g_quit) != 0)
+		LOGW("감시를 시작하지 못함 (송출은 계속)");
 
-	while (!g_quit)
+	while (!g_quit) {
+		if (watch_take_reinit_request()) {
+			int ok;
+
+			/* 파이프라인 전체를 해제하고 다시 띄운다. RTSP 서버와 세션은 그대로 둔다. */
+			LOGW("재초기화 시작");
+			watch_reinit_begin();
+			pipeline_stop();
+			sleep(1);
+			ok = pipeline_start(&cfg) == 0;
+			watch_reinit_end(ok);
+			if (ok)
+				LOGI("재초기화: 파이프라인을 다시 띄움");
+			else
+				LOGE("재초기화: 파이프라인을 다시 띄우지 못함");
+			continue;
+		}
 		usleep(200 * 1000);
+	}
 
 	LOGI("종료 요청, 해제 시작 (메인 %llu, 서브 %llu 프레임 송출)",
 	     (unsigned long long)video_frames_out(0), (unsigned long long)video_frames_out(1));
 	pipeline_stop();
+	watch_stop();
 	rtsp_srv_stop();
 	LOGI("종료");
 	log_close();
