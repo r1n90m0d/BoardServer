@@ -74,7 +74,7 @@ $ adb shell ip addr
     inet6 fe80::57e:cdf7:4f6d:f115/64 scope link 
        valid_lft forever preferred_lft forever
 5: usb0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast qlen 1000
-    link/ether ae:e2:79:7f:8f:70 brd ff:ff:ff:ff:ff:ff
+    link/ether <redacted> brd ff:ff:ff:ff:ff:ff
     inet 172.32.0.93/16 brd 172.32.255.255 scope global usb0
        valid_lft forever preferred_lft forever
     inet 169.254.172.245/16 brd 169.254.255.255 scope global noprefixroute usb0
