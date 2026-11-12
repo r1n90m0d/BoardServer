@@ -23,6 +23,7 @@
 - I2 기준 문서: `docs/I2/`의 `I2_Description.md`, `ICD_I2range.md`, `I2_ToDoList.md` (`docs/srs/`는 만들지 않음)
   - `docs/I2/`는 git 추적 대상이 아님(공개 저장소라 서버 IP·MAC 포함 문서를 올리지 않음). 원본은 노션
 - I2 진행 기록: `docs/progress/I2.md` — 체크리스트와 세션 로그
+- 변경 이력: `docs/progress/commit-log.md` — 커밋별 상세 기록(6번 규칙)
 - RKMPI 문서 검색은 `docs/vendor/`의 마크다운에서 grep, 원본은 SDK 경로(`~/luckfox-pico/media/...`, 목록은 `docs/vendor/README.md`). `docs/vendor/`는 git 추적 대상 아님
 
 ## 보드 접근 방법
@@ -52,6 +53,15 @@
      - 형식: 날짜·시각 / 작업 이름 / 무엇을 / 왜 주의해야 하는지 / 되돌리는 방법 / 상태(미해결·해결됨)
      - 기존 항목은 지우거나 고치지 않음. 해결되면 새 줄로 "해결됨"을 추가함
      - 키·IP·MAC 같은 값을 그대로 적어도 되는 로컬 전용 파일임. `.gitignore` 대상이며 커밋하지 않음
+6. **커밋 규칙** (모든 커밋에 적용)
+   - 메시지는 한국어 한 줄 `type(범위): 핵심 변경 요약` (예: `docs(progress): Wi-Fi 변경, 최종 점검 기록`). type 접두어는 영어 그대로. 본문 없음, **`Co-Authored-By` 줄은 붙이지 않음**
+   - 상세 변경 이력은 `docs/progress/commit-log.md`(저장소에 추적됨)에 쌓음. 날짜별 헤더(`## 2026-11-12`) 아래에 시각별 항목을 **최신이 위로** 추가. 시각은 KST(`TZ=Asia/Seoul date`로 확인)
+     - 항목 형식: `### HH:MM KST — <커밋 메시지와 같은 한 줄 요약>` 아래에 `커밋`(해시 앞 7자리), `변경 파일`(파일명과 +/- 줄 수), `상세`(무엇을·왜, 원인·결정 이유 포함), `검증`(명령·결과 요약), `민감 변경 참조`(`docs/sensitive-changes.md` 번호만, 내용은 쓰지 않음)
+     - 해시는 커밋 전에는 모르므로 `(다음 커밋 때 보충)`이라 적고, **다음 커밋을 만들 때 직전 항목의 해시를 채움**. 해시 보충만을 위한 별도 커밋은 만들지 않음
+     - 공개 저장소에 올라가는 파일이므로 SSID, 비밀번호, 공인 IP, 키, MAC, 보드 LAN IP는 쓰지 않고 필요하면 `[redacted]`. 민감 내용은 로컬 전용 `docs/sensitive-changes.md`에만 기록
+     - `docs/progress/I2.md`는 체크리스트·시험 결과용, `commit-log.md`는 변경 이력용. 내용을 중복해 쓰지 않고 필요하면 서로 참조만 함
+   - **매 커밋 절차**: ① 민감값 검사(SSID, 비밀번호, 서버 공인 IP, WG 키·base64 44자, MAC, 보드 LAN IP, 토큰) ② `commit-log.md`에 이번 항목 추가 ③ 커밋 메시지와 로그 항목을 사용자에게 보여 주고 **승인을 받음** ④ 승인 후 `commit-log.md`를 같은 커밋에 포함해 커밋 ⑤ **push는 사용자가 지시할 때만** ⑥ 이전부터 제외해 온 파일(`docs/sdk-reference.md`, `heartbeat/mac_test.c` 등)은 넣지 않음. 커밋 직전에 `git status`로 확인
+   - 이미 올라간 이력은 재작성하지 않음
 
 ## 이 파일에 일부러 안 넣은 것
 
